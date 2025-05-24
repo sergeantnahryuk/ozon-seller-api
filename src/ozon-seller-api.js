@@ -156,24 +156,28 @@ function compareTimeslotObjects(originalObj, currentObj, comparisonKey = 'defaul
   if (!currentObj) throw new Error('currentObj обязателен /  currentObj are required');
   if (currentObj.code) throw new Error(`Ответ апи содержит код ошибки ${currentObj.code}: ${currentObj.message} / API response contains error code ${currentObj.code}: ${currentObj.message}`);
   let originalArray;
+  let compareWith;
   const currentArray = currentObj.timeslots;
   if(originalObj) originalArray = originalObj.timeslots;
 
   // Если ключа ещё нет — инициализируем память с оригинальным массивом
   if (!differencesMemory[comparisonKey]) {
+    compareWith = originalArray || [];
     differencesMemory[comparisonKey] = {
       original: originalArray || [],
       history: [],
-      current: originalArray || [] // Добавляем текущее состояние
+      current: currentArray || [] // Добавляем текущее состояние
     };
     console.log(`[INIT] Сохраняем оригинальный массив для ключа "${comparisonKey}"`);
+  } else {
+    compareWith = differencesMemory[comparisonKey].current || [];
+    console.log(`[INIT] Загружен последний сохранённый массив для ключа "${comparisonKey}"`);
   }
 
-  const savedOriginal = differencesMemory[comparisonKey].original;
   const current = currentArray || [];
 
   // Если передан originalObj, сравниваем с ним, иначе с текущим состоянием
-  const compareWith = originalObj ? savedOriginal : differencesMemory[comparisonKey].current;
+  //const compareWith = originalObj ? savedOriginal : differencesMemory[comparisonKey].current;
 
   // Сравниваем с выбранным состоянием
   const added = current.filter(obj =>

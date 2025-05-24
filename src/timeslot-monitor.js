@@ -1,4 +1,4 @@
-const ozon = require('./ozon-seller-api');
+const ozon = require('./ozon-seller-api.js');
 
 /**
  * Непрерывно отслеживает таймслоты для указанных ID заказов

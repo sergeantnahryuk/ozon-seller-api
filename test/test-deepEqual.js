@@ -1,5 +1,5 @@
 const assert = require('assert');
-const ozon = require('./ozon-seller-api');
+const ozon = require('../src/ozon-seller-api');
 
 // Исходные данные
 const obj1 = {
@@ -96,7 +96,7 @@ ozon.resetMemory(); // Очищаем состояние перед тестам
 // TEST 1: Проверяем первое добавление таймслота
 // Ожидаемый результат: должен добавиться один новый таймслот с датой 2019-08-25
 console.log('✅ TEST 1: Первое добавление с ключом');
-let result = ozon.compareTimeslotObjects(obj1, obj2, 'testKey', 42);
+let result = ozon.compareTimeslotObjects(null, obj2, 'testKey', 42);
 assert.strictEqual(result.added.length, 1);
 assert.strictEqual(result.added[0].from, '2019-08-25T14:15:22Z');
 
@@ -122,7 +122,7 @@ assert.strictEqual(result.added.length, 2);
 // TEST 5: Проверяем обработку пустого массива таймслотов
 // Ожидаемый результат: должен вернуть один удаленный таймслот
 console.log('✅ TEST 5: Пустой массив таймслотов');
-result = ozon.compareTimeslotObjects(obj1, obj5, 'testKey', 42);
+result = ozon.compareTimeslotObjects(null, obj5, 'testKey', 42);
 assert.strictEqual(result.removed.length, 1);
 
 // TEST 6: Проверяем обработку пустого массива timezone
@@ -134,31 +134,31 @@ assert.strictEqual(result.added.length, 0);
 // TEST 7: Проверяем обработку null вместо массива таймслотов
 // Ожидаемый результат: должен вернуть один удаленный таймслот
 console.log('✅ TEST 7: Null вместо массива таймслотов');
-result = ozon.compareTimeslotObjects(obj1, obj7, 'testKey', 42);
+result = ozon.compareTimeslotObjects(null, obj7, 'testKey', 42);
 assert.strictEqual(result.removed.length, 1);
 
 // TEST 8: Проверяем обработку null вместо массива timezone
 // Ожидаемый результат: не должно быть изменений
 console.log('✅ TEST 8: Null вместо массива timezone');
-result = ozon.compareTimeslotObjects(obj1, obj8, 'testKey', 42);
+result = ozon.compareTimeslotObjects(null, obj8, 'testKey', 42);
 assert.strictEqual(result.added.length, 0);
 
 // TEST 9: Проверяем обработку дополнительного поля в корне объекта
 // Ожидаемый результат: не должно быть изменений
 console.log('✅ TEST 9: Дополнительное поле в корне объекта');
-result = ozon.compareTimeslotObjects(obj1, obj9, 'testKey', 42);
+result = ozon.compareTimeslotObjects(null, obj9, 'testKey', 42);
 assert.strictEqual(result.added.length, 0);
 
 // TEST 10: Проверяем обработку дополнительного поля в таймслоте
 // Ожидаемый результат: не должно быть изменений
 console.log('✅ TEST 10: Дополнительное поле в таймслоте');
-result = ozon.compareTimeslotObjects(obj1, obj10, 'testKey', 42);
+result = ozon.compareTimeslotObjects(null, obj10, 'testKey', 42);
 assert.strictEqual(result.added.length, 0);
 
 // TEST 11: Проверяем множественные изменения таймслотов
 // Ожидаемый результат: должны добавиться два новых таймслота
 console.log('✅ TEST 11: Множественные изменения');
-result = ozon.compareTimeslotObjects(obj1, obj4, 'testKey', 42);
+result = ozon.compareTimeslotObjects(null, obj4, 'testKey', 42);
 assert.strictEqual(result.added.length, 2);
 
 console.log('✅ Все тесты прошли успешно!');
