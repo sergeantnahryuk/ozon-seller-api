@@ -196,9 +196,9 @@ monitor.stop();
 
 ## Лицензия / License
 
-MIT 
+MIT
 
 ## Ссылки / Links
 
 - **GitHub:** [https://github.com/sergeantnahryuk/ozon-seller-api](https://github.com/sergeantnahryuk/ozon-seller-api)
-- **npm:** [https://www.npmjs.com/package/ozon-seller-api-extended](https://www.npmjs.com/package/ozon-seller-api-extended) 
+- **npm:** [https://www.npmjs.com/package/ozon-seller-api-extended](https://www.npmjs.com/package/ozon-seller-api-extended)
