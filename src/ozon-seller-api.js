@@ -21,6 +21,8 @@ const MAX_ORDERS_PER_REQUEST = 100;
 let apiKey = null;
 let clientId = null;
 let differencesMemory = {};
+let memoryUpdateCallbacks = [];
+const MAX_HISTORY_ENTRIES = 1000; // Максимальное количество записей в истории
 
 /**
  * Форматирует дату в локальный формат
@@ -93,6 +95,53 @@ function deepEqual(a, b) {
 }
 
 /**
+ * Подписывает функцию обратного вызова на обновления памяти
+ * @param {Function} callback - Функция, которая будет вызвана при обновлении памяти
+ * @returns {Function} Функция для отмены подписки
+ */
+function onMemoryUpdate(callback) {
+    if (typeof callback !== 'function') {
+        throw new Error('Callback должен быть функцией');
+    }
+    memoryUpdateCallbacks.push(callback);
+    
+    // Возвращаем функцию для отмены подписки
+    return () => {
+        const index = memoryUpdateCallbacks.indexOf(callback);
+        if (index !== -1) {
+            memoryUpdateCallbacks.splice(index, 1);
+        }
+    };
+}
+
+/**
+ * Уведомляет подписчиков об обновлении памяти
+ * @param {Object} data - Данные об обновлении
+ */
+function notifyMemoryUpdate(data) {
+    memoryUpdateCallbacks.forEach(callback => {
+        try {
+            callback(data);
+        } catch (error) {
+            console.error('Ошибка в callback обновления памяти:', error);
+        }
+    });
+}
+
+/**
+ * Очищает старые записи из истории
+ * @param {string} comparisonKey - Ключ сравнения
+ */
+function cleanupHistory(comparisonKey) {
+    if (differencesMemory[comparisonKey] && differencesMemory[comparisonKey].history) {
+        const history = differencesMemory[comparisonKey].history;
+        if (history.length > MAX_HISTORY_ENTRIES) {
+            differencesMemory[comparisonKey].history = history.slice(-MAX_HISTORY_ENTRIES);
+        }
+    }
+}
+
+/**
  * Сравнивает текущий массив таймслотов с сохраненным ранее состоянием
  * @param {Object} currentObj - Текущий объект с таймслотами
  * @param {string} [comparisonKey=DEFAULT_COMPARISON_KEY] - Ключ для хранения состояния
@@ -101,55 +150,65 @@ function deepEqual(a, b) {
  * @throws {Error} Если currentObj не передан или содержит ошибку API
  */
 function compareTimeslotObjects(currentObj, comparisonKey = DEFAULT_COMPARISON_KEY, logId = DEFAULT_LOG_ID) {
-  // Валидация входных данных
-  if (!currentObj) {
-    throw new Error('currentObj обязателен / currentObj is required');
-  }
-  
-  if (currentObj.code) {
-    throw new Error(`Ответ апи содержит код ошибки ${currentObj.code}: ${currentObj.message}`);
-  }
-
-  // Получение текущего массива таймслотов
-  const currentArray = currentObj.timeslots || [];
-
-  // Инициализация или получение сохраненного состояния
-  let compareWith;
-  if (!differencesMemory[comparisonKey]) {
-    compareWith = [];
-    differencesMemory[comparisonKey] = {
-      original: currentArray,
-      history: [],
-      latest: currentArray
-    };
-    console.log(`[INIT] Сохраняем оригинальный массив для ключа "${comparisonKey}"`);
-  } else {
-    compareWith = differencesMemory[comparisonKey].latest || [];
-    console.log(`[INIT] Загружен последний сохранённый массив для ключа "${comparisonKey}"`);
-  }
-
-  // Сравнение массивов
-  const added = currentArray.filter(obj => !compareWith.some(saved => deepEqual(saved, obj)));
-  const removed = compareWith.filter(obj => !currentArray.some(current => deepEqual(current, obj)));
-
-  // Если есть изменения, логируем их
-  if (added.length || removed.length) {
-    const timestamp = new Date().toISOString();
-    const logEntry = { id: logId, timestamp, added, removed };
+    // Валидация входных данных
+    if (!currentObj) {
+        throw new Error('currentObj обязателен / currentObj is required');
+    }
     
-    differencesMemory[comparisonKey].history.push(logEntry);
-    differencesMemory[comparisonKey].latest = currentArray;
+    if (currentObj.code) {
+        throw new Error(`Ответ апи содержит код ошибки ${currentObj.code}: ${currentObj.message}`);
+    }
 
-    console.log(`[LOG][${comparisonKey}] (${timestamp}) ID=${logId}`);
-    
-    // Логирование добавленных таймслотов
-    added.forEach(timeslot => logTimeslotChange('➕ Added', comparisonKey, timestamp, logId, timeslot));
-    
-    // Логирование удаленных таймслотов
-    removed.forEach(timeslot => logTimeslotChange('➖ Removed', comparisonKey, timestamp, logId, timeslot));
-  }
+    // Получение текущего массива таймслотов
+    const currentArray = currentObj.timeslots || [];
 
-  return { added, removed };
+    // Инициализация или получение сохраненного состояния
+    let compareWith;
+    if (!differencesMemory[comparisonKey]) {
+        compareWith = [];
+        differencesMemory[comparisonKey] = {
+            original: currentArray,
+            history: [],
+            latest: currentArray
+        };
+        console.log(`[INIT] Сохраняем оригинальный массив для ключа "${comparisonKey}"`);
+    } else {
+        compareWith = differencesMemory[comparisonKey].latest || [];
+    }
+
+    // Сравнение массивов
+    const added = currentArray.filter(obj => !compareWith.some(saved => deepEqual(saved, obj)));
+    const removed = compareWith.filter(obj => !currentArray.some(current => deepEqual(current, obj)));
+
+    // Если есть изменения, логируем их
+    if (added.length || removed.length) {
+        const timestamp = new Date().toISOString();
+        const logEntry = { id: logId, timestamp, added, removed };
+        
+        differencesMemory[comparisonKey].history.push(logEntry);
+        differencesMemory[comparisonKey].latest = currentArray;
+
+        // Очищаем старые записи
+        cleanupHistory(comparisonKey);
+
+        // Логирование добавленных таймслотов
+        added.forEach(timeslot => logTimeslotChange('➕ Added', comparisonKey, timestamp, logId, timeslot));
+        
+        // Логирование удаленных таймслотов
+        removed.forEach(timeslot => logTimeslotChange('➖ Removed', comparisonKey, timestamp, logId, timeslot));
+
+        // Уведомляем подписчиков об изменениях
+        notifyMemoryUpdate({
+            comparisonKey,
+            timestamp,
+            logId,
+            added,
+            removed,
+            currentArray
+        });
+    }
+
+    return { added, removed };
 }
 
 /**
@@ -287,22 +346,29 @@ async function getTimeslotsByDateRange(id, from, to, callback) {
     return data;
   }
 
+  console.log("from",from,"to",to,"in function getTimeslotsByDateRange");
+  console.log("data in function getTimeslotsByDateRange",data);
   // Фильтруем таймслоты по диапазону дат
-  if (data.timeslots && data.timezone?.length > 0) {
-    const timezone = data.timezone[0];
-    const offset = timezone.offset;
+  if (data.timeslots) {
+
     
-    const fromDate = from ? new Date(from + offset) : null;
-    const toDate = to ? new Date(to + offset) : null;
-
+    const fromDate = from 
+    const toDate = to 
+    console.log(`Количество таймслотов до фильтрации: ${data.timeslots.length}`);
+    
     data.timeslots = data.timeslots.filter(timeslot => {
-      const slotFrom = new Date(timeslot.from + offset);
-      const slotTo = new Date(timeslot.to + offset);
-
-      if (fromDate && slotTo < fromDate) return false;
-      if (toDate && slotFrom > toDate) return false;
+      const slotFrom = timeslot.from;
+      const slotTo = timeslot.to;
+      
+      const isBeforeFromDate = fromDate && slotTo < fromDate;
+      const isAfterToDate = toDate && slotFrom > toDate;
+      
+      if (isBeforeFromDate) return false;
+      if (isAfterToDate) return false;
       return true;
     });
+
+    console.log(`Количество таймслотов после фильтрации: ${data.timeslots.length}`);
   }
   
   if (callback) callback(data);
@@ -313,8 +379,9 @@ async function getTimeslotsByDateRange(id, from, to, callback) {
  * Сбрасывает память для хранения отличий
  */
 function resetMemory() {
-  differencesMemory = {};
-  logToFile('Память для хранения отличий сброшена / Memory for storing differences reset');
+    differencesMemory = {};
+    memoryUpdateCallbacks = [];
+    logToFile('Память для хранения отличий сброшена / Memory for storing differences reset');
 }
 
 // Экспорт функций
@@ -325,5 +392,6 @@ module.exports = {
   getTimeslotsForIds,
   compareTimeslotObjects,
   getTimeslotsByDateRange,
-  resetMemory
+  resetMemory,
+  onMemoryUpdate
 }; 

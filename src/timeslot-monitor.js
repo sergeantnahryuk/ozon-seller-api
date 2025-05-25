@@ -21,28 +21,66 @@ async function monitorTimeslots(ids, options = {}) {
     // Преобразуем один ID в массив
     const idArray = Array.isArray(ids) ? ids : [ids];
     let isMonitoring = true;
+    let lastCheckTime = 0;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
+    const MIN_CHECK_INTERVAL = 1000; // Минимальный интервал между проверками в мс
 
     // Функция для выполнения одной проверки
     async function performCheck() {
         try {
+            const now = Date.now();
+            // Проверяем, прошло ли достаточно времени с последней проверки
+            if (now - lastCheckTime < MIN_CHECK_INTERVAL) {
+                return;
+            }
+
             let data;
             
             if (from || to) {
+                console.log("from",from,"to",to);
                 // Если указан диапазон дат, используем getTimeslotsByDateRange
                 const results = await Promise.all(
                     idArray.map(id => ozon.getTimeslotsByDateRange(id, from, to))
                 );
+                console.log('getTimeslotsByDateRange',results);
                 data = { timeslots: results.flatMap(r => r.timeslots || []) };
+                
             } else {
                 // Иначе используем getTimeslotsForIds
                 const results = await ozon.getTimeslotsForIds(idArray, rps);
                 data = { timeslots: results.flatMap(r => r.timeslots || []) };
             }
 
-            // Сравниваем и логируем изменения
-            ozon.compareTimeslotObjects(null, data, comparisonKey, idArray.join('-'));
+            // Сбрасываем счетчик ошибок при успешной проверке
+            consecutiveErrors = 0;
+
+            // Сравниваем и логируем изменения только если есть таймслоты
+            if (data.timeslots && data.timeslots.length > 0) {
+                console.log('Отправляем данные в compareTimeslotObjects:', {
+                    comparisonKey,
+                    logId: idArray.join('-'),
+                    timeslotsCount: data.timeslots.length,
+                    timeslots: data.timeslots.map(ts => ({
+                        from: new Date(ts.from).toLocaleString(),
+                        to: new Date(ts.to).toLocaleString()
+                    }))
+                });
+                ozon.compareTimeslotObjects(data, comparisonKey, idArray.join('-'));
+            } else {
+                console.log('Нет таймслотов для сравнения');
+            }
+
+            lastCheckTime = now;
         } catch (error) {
             console.error('Ошибка при проверке таймслотов:', error);
+            consecutiveErrors++;
+            
+            // Если слишком много ошибок подряд, останавливаем мониторинг
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                console.error('Слишком много ошибок подряд, останавливаем мониторинг');
+                isMonitoring = false;
+            }
         }
     }
 
@@ -50,16 +88,20 @@ async function monitorTimeslots(ids, options = {}) {
     async function runMonitoring() {
         while (isMonitoring) {
             await performCheck();
+            // Добавляем задержку между проверками
+            await new Promise(resolve => setTimeout(resolve, 10000 / rps));
         }
     }
 
     // Запускаем мониторинг
     runMonitoring();
 
-    // Возвращаем объект с методом stop
+    // Возвращаем объект с методами управления
     return {
         stop: () => {
             isMonitoring = false;
+            // Очищаем память при остановке
+            ozon.resetMemory();
         }
     };
 }
